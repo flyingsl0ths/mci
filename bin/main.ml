@@ -14,7 +14,7 @@ let ( << ) f g x = f (g x)
 
 let interpret expr_ =
   let table = [] in
-  let update_symbol table id value = List.remove_assq id table @ [ (id, value) ] in
+  let update_symbol table id value = (id, value) :: List.remove_assq id table in
   let interpret_op = function
     | Add -> fun a b -> a + b
     | Sub -> fun a b -> a - b
@@ -22,7 +22,8 @@ let interpret expr_ =
     | Div -> fun a b -> a / b
   in
   let rec interpret' table = function
-    | Assign (id_, expr_) -> update_symbol table id_ @@ interpret_expr table expr_
+    | Assign (id_, expr_) ->
+        update_symbol table id_ @@ interpret_expr table expr_
     | Compound (stmt1, stmt2) -> interpret' (interpret' table stmt1) stmt2
     | Print exprs ->
         let _ =
