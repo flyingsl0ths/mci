@@ -14,6 +14,9 @@ let ( << ) f g x = f (g x)
 
 let interpret expr_ =
   let table = [] in
+  let print_table =
+    List.iter (fun (id, value) -> Printf.printf "%s: %d\n" id value)
+  in
   let update_symbol table id value = (id, value) :: List.remove_assq id table in
   let interpret_op = function
     | Add -> fun a b -> a + b
@@ -25,14 +28,7 @@ let interpret expr_ =
     | Assign (id_, expr_) ->
         update_symbol table id_ @@ interpret_expr table expr_
     | Compound (stmt1, stmt2) -> interpret' (interpret' table stmt1) stmt2
-    | Print exprs ->
-        let _ =
-          List.iter
-            (fun expr_ ->
-              (print_endline << string_of_int) @@ interpret_expr table expr_)
-            exprs
-        in
-        table
+    | _ -> table
   and interpret_expr table = function
     | Id id_ -> List.assoc id_ table
     | Num n -> n
@@ -41,7 +37,10 @@ let interpret expr_ =
         op' (interpret_expr table expr_) (interpret_expr table expr2)
     | Eseq (st, expr_) -> interpret_expr (interpret' table st) @@ expr_
   in
-  interpret' table expr_
+  print_table @@ interpret' table expr_
+
+let program =
+  Compound (Assign ("a", Op (Num 5, Add, Num 3)), Print [ Id "a"; Num 5 ])
 ;;
 
-print_endline "Hello, World!"
+interpret program
