@@ -2,3 +2,7 @@
  (public_name tiger)
  (name main)
  (libraries tiger))
+
+(env
+(dev
+(flags (:standard -warn-error -A))))
