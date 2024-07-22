@@ -9,9 +9,6 @@ and expr =
   | Op of expr * binop * expr
   | Eseq of stmt * expr
 
-let max_args = function Print _ -> 2 | _ -> 0
-let ( << ) f g x = f (g x)
-
 let interpret expr_ =
   let table = [] in
   let print_table =
@@ -27,8 +24,15 @@ let interpret expr_ =
   let rec interpret' table = function
     | Assign (id_, expr_) ->
         update_symbol table id_ @@ interpret_expr table expr_
-    | Compound (stmt1, stmt2) -> interpret' (interpret' table stmt1) stmt2
-    | _ -> table
+    | Compound (stmt1, stmt2) ->
+        let table' = interpret' table stmt1 in
+        print_table table';
+        let table'' = interpret' table' stmt2 in
+        print_table table'';
+        table''
+    | _ ->
+        print_table table;
+        table
   and interpret_expr table = function
     | Id id_ -> List.assoc id_ table
     | Num n -> n
@@ -37,7 +41,7 @@ let interpret expr_ =
         op' (interpret_expr table expr_) (interpret_expr table expr2)
     | Eseq (st, expr_) -> interpret_expr (interpret' table st) @@ expr_
   in
-  print_table @@ interpret' table expr_
+  interpret' table expr_
 
 let program =
   Compound (Assign ("a", Op (Num 5, Add, Num 3)), Print [ Id "a"; Num 5 ])
