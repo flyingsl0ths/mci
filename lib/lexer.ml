@@ -1,15 +1,24 @@
 open Token
+open Errormsg
 
 type t = {
   source : string;
   start : int;
   current : int;
   line : int;
+  in_comment : bool;
   gen_source_sub : bool;
 }
 
 let mk_lexer source =
-  { source; start = 0; current = 0; line = 1; gen_source_sub = false }
+  {
+    source;
+    start = 0;
+    current = 0;
+    line = 1;
+    in_comment = false;
+    gen_source_sub = false;
+  }
 
 let advance ({ current; _ } as s) =
   ({ s with current = current + 1 }, s.source.[current])
@@ -29,23 +38,32 @@ let mk_token { start; current; source; _ } to_tk_type =
   to_tk_type (source, start, end')
 
 let matches expected ({ current; source; _ } as s) =
-  let matches = is_at_end s || source.[current] <> expected in
-  ((if matches then advance' s else s), matches)
+  let no_match = is_at_end s || source.[current] <> expected in
+  ((if no_match then s else advance' s), not @@ no_match)
 
 let skip_whitespace s =
   let rec skip_whitespace' s' =
     match peek s' with
     | Some ' ' | Some '\r' | Some '\t' -> skip_whitespace' @@ advance' s'
-    | Some '\n' ->
-        skip_whitespace'
-          { s' with line = s'.line + 1; current = s'.current + 1 }
-    | Some '/' -> (
+    | Some '\n' -> skip_whitespace' @@ advance' { s' with line = s'.line + 1 }
+    | Some '(' -> (
         match peek_next s' with
-        | Some '/' ->
+        | Some '*' ->
             let rec skip_comment s'' =
-              match peek s'' with
-              | Some '\n' | None -> s''
-              | _ -> skip_comment @@ advance' s''
+              if s''.in_comment then
+                skip_comment @@ advance'
+                @@
+                match peek s'' with
+                | Some c -> (
+                    match c with
+                    | '\n' -> { s'' with line = s''.line + 1 }
+                    | '*' -> (
+                        match peek_next s'' with
+                        | Some ')' -> { s'' with in_comment = true }
+                        | _ -> s'')
+                    | _ -> s'')
+                | _ -> s''
+              else { s'' with in_comment = false }
             in
             skip_comment @@ advance' s'
         | _ -> s')
@@ -97,12 +115,13 @@ let identifier_type lxr =
     let rest_matches =
       String.compare (String.sub source (start + offset) len) rest == 0
     in
-    let matches = current - start == start + len && rest_matches in
-    if matches then to_token else fun (id, p1, p2) -> Id (id, p1, p2)
+    let matched = current - start == start + len && rest_matches in
+    if matched then to_token else fun (id, p1, p2) -> Id (id, p1, p2)
   in
   match peek lxr with
   | Some c -> (
       match c with
+      | 'a' -> check_keyword lxr 1 4 "rray" @@ fun (_, p1, p2) -> Array (p1, p2)
       | 'b' -> check_keyword lxr 1 4 "reak" @@ fun (_, p1, p2) -> Break (p1, p2)
       | 'd' when at_most_n lxr ->
           matches_last lxr 'o' (fun (_, p1, p2) -> Do (p1, p2))
@@ -144,6 +163,8 @@ let identifier_type lxr =
               match c' with
               | 'h' ->
                   check_keyword lxr 2 2 "en" @@ fun (_, p1, p2) -> Then (p1, p2)
+              | 'y' ->
+                  check_keyword lxr 2 2 "pe" @@ fun (_, p1, p2) -> Type (p1, p2)
               | 'o' -> fun (_, p1, p2) -> To (p1, p2)
               | _ -> fun (id, p1, p2) -> Id (id, p1, p2))
           | _ -> fun (id, p1, p2) -> Id (id, p1, p2))
