@@ -7,18 +7,10 @@ type t = {
   current : int;
   line : int;
   in_comment : bool;
-  gen_source_sub : bool;
 }
 
 let mk_lexer source =
-  {
-    source;
-    start = 0;
-    current = 0;
-    line = 1;
-    in_comment = false;
-    gen_source_sub = false;
-  }
+  { source; start = 0; current = 0; line = 1; in_comment = false }
 
 let advance ({ current; _ } as s) =
   ({ s with current = current + 1 }, s.source.[current])
@@ -84,7 +76,8 @@ let number lx =
     | Some c, Some c' when c == '.' && is_digit c' -> has_digit @@ advance' lx'
     | _ -> lx'
   in
-  has_decimal @@ has_digit lx
+  let lx' = has_decimal @@ has_digit lx in
+  mk_token lx' @@ fun (str, p1, p2) -> Int (int_of_string str, p1, p2)
 
 let strng lx =
   let if_new_line lx' =
@@ -98,7 +91,7 @@ let strng lx =
         strng' @@ advance' @@ if_new_line lx'
     | _ -> lx'
   in
-  strng' lx
+  mk_token (strng' lx) @@ fun (str, p1, p2) -> String (str, p1, p2)
 
 let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' | '_' -> true | _ -> false
 
@@ -181,3 +174,51 @@ let identifier lx =
   in
   let lx' = conforms lx in
   mk_token lx' (identifier_type lx')
+
+let scan_token lx =
+  let lx' = skip_whitespace lx in
+  let lx'' = { lx' with start = lx'.current } in
+  if is_at_end lx'' then (mk_token lx'' (fun (_, p1, p2) -> Eof (p1, p2)), lx'')
+  else
+    let lx'', c = advance lx'' in
+    let scan c lx =
+      match c with
+      | '0' .. '9' -> number lx
+      | 'a' .. 'z' | 'A' .. 'Z' -> identifier lx
+      | '"' -> strng lx
+      | '(' -> mk_token lx @@ fun (_, p1, p2) -> Lparen (p1, p2)
+      | ')' -> mk_token lx @@ fun (_, p1, p2) -> Rparen (p1, p2)
+      | '{' -> mk_token lx @@ fun (_, p1, p2) -> Lbrace (p1, p2)
+      | '}' -> mk_token lx @@ fun (_, p1, p2) -> Rbrace (p1, p2)
+      | '[' -> mk_token lx @@ fun (_, p1, p2) -> Lbrack (p1, p2)
+      | ']' -> mk_token lx @@ fun (_, p1, p2) -> Rbrack (p1, p2)
+      | ';' -> mk_token lx @@ fun (_, p1, p2) -> Semicolon (p1, p2)
+      | ',' -> mk_token lx @@ fun (_, p1, p2) -> Comma (p1, p2)
+      | '.' -> mk_token lx @@ fun (_, p1, p2) -> Dot (p1, p2)
+      | '-' -> mk_token lx @@ fun (_, p1, p2) -> Minus (p1, p2)
+      | '+' -> mk_token lx @@ fun (_, p1, p2) -> Plus (p1, p2)
+      | '/' -> mk_token lx @@ fun (_, p1, p2) -> Divide (p1, p2)
+      | '*' -> mk_token lx @@ fun (_, p1, p2) -> Times (p1, p2)
+      | '&' -> mk_token lx @@ fun (_, p1, p2) -> And (p1, p2)
+      | '|' -> mk_token lx @@ fun (_, p1, p2) -> Or (p1, p2)
+      | '=' -> mk_token lx @@ fun (_, p1, p2) -> Eq (p1, p2)
+      | ':' ->
+          let lx'', matched = matches '=' lx in
+          if matched then mk_token lx'' @@ fun (_, p1, p2) -> Assign (p1, p2)
+          else mk_token lx @@ fun (_, p1, p2) -> Colon (p1, p2)
+      | '<' ->
+          let lx'', matched = matches '>' lx in
+          if matched then mk_token lx'' @@ fun (_, p1, p2) -> Neq (p1, p2)
+          else
+            let lx''', matched' = matches '=' lx in
+            if matched' then mk_token lx''' @@ fun (_, p1, p2) -> Le (p1, p2)
+            else mk_token lx''' @@ fun (_, p1, p2) -> Lt (p1, p2)
+      | '>' ->
+          let lx'', matched = matches '=' lx in
+          if matched then mk_token lx'' @@ fun (_, p1, p2) -> Ge (p1, p2)
+          else mk_token lx @@ fun (_, p1, p2) -> Gt (p1, p2)
+      | _ ->
+          Errormsg.error lx.start "Illegal character";
+          raise Errormsg.Error
+    in
+    (scan c lx'', lx'')
