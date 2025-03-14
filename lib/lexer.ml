@@ -12,8 +12,8 @@ type t = {
 let mk_lexer source =
   { source; start = 0; current = 0; line = 1; in_comment = false }
 
-let advance ({ current; _ } as s) =
-  ({ s with current = current + 1 }, s.source.[current])
+let advance ({ current; source; _ } as s) =
+  ({ s with current = current + 1 }, source.[current])
 
 let advance' ({ current; _ } as s) = { s with current = current + 1 }
 let is_at_end { current; source; _ } = current >= String.length source
